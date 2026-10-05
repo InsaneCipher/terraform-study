@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terraform Associate 004 Practice</title>
+<style>
+:root{--bg:#f6f5f9;--card:#fff;--ink:#1c1b22;--muted:#6a6878;--line:#e2e0ea;--accent:#5c4ee5;--ok:#1f8a4c;--okbg:#e6f5ec;--bad:#c0392b;--badbg:#fbeaea}
+@media(prefers-color-scheme:dark){:root{--bg:#14131a;--card:#1e1d26;--ink:#ecebf3;--muted:#9a98a8;--line:#33313f;--accent:#8f85ff;--ok:#4cc784;--okbg:#153524;--bad:#ff7b6b;--badbg:#3a1a1a}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:760px;margin:0 auto;padding:24px 16px 80px}
+h1{font-size:1.6rem;margin:0 0 4px}
+.sub{color:var(--muted);margin:0 0 24px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin-bottom:16px}
+label.field{display:block;margin:0 0 14px;font-weight:600}
+select,input[type=number]{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);margin-top:4px;width:100%}
+button{font:inherit;font-weight:600;padding:10px 18px;border-radius:6px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer}
+button.secondary{background:transparent;color:var(--accent)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.topic{font-size:.85rem;color:var(--muted)}
+.q{font-weight:600;margin:4px 0 12px}
+.hint{font-size:.85rem;color:var(--muted);margin:-6px 0 10px}
+.opt{display:flex;gap:10px;align-items:flex-start;padding:9px 12px;border:1px solid var(--line);border-radius:8px;margin-bottom:8px;cursor:pointer}
+.opt:hover{border-color:var(--accent)}
+.opt input{margin-top:5px}
+.opt.correct{background:var(--okbg);border-color:var(--ok)}
+.opt.wrong{background:var(--badbg);border-color:var(--bad)}
+.opt.missed{border-style:dashed;border-color:var(--ok)}
+.tag{margin-left:auto;font-size:.8rem;font-weight:600;white-space:nowrap}
+.verdict{font-weight:700;margin-bottom:6px}
+.verdict.ok{color:var(--ok)}.verdict.no{color:var(--bad)}
+.expl{margin-top:10px;padding:10px 12px;border-left:3px solid var(--accent);background:var(--bg);font-size:.95rem}
+.bar{position:sticky;top:0;background:var(--bg);padding:10px 0;z-index:5;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);margin-bottom:16px}
+.score{font-size:3rem;font-weight:800;line-height:1}
+.topics td{padding:4px 12px 4px 0}
+.err{color:var(--bad)}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<main>
+  <h1>Terraform Associate 004 practice</h1>
+  <p class="sub" id="sub">Loading questions…</p>
+
+  <section id="loader" class="card hidden">
+    <p><strong>Couldn't load questions.json automatically.</strong> Browsers block file reads when you open an HTML file directly. Choose the file instead, or run <code>python3 -m http.server</code> in this folder and open <code>localhost:8000</code>.</p>
+    <input type="file" id="file" accept=".json,application/json">
+    <p class="err" id="loadErr"></p>
+  </section>
+
+  <section id="setup" class="card hidden">
+    <label class="field">Topic
+      <select id="topic"></select>
+    </label>
+    <label class="field">Number of questions
+      <input type="number" id="count" min="1" value="57">
+    </label>
+    <label class="field"><input type="checkbox" id="shuffle" checked> Shuffle questions and answer order</label>
+    <button id="start">Start</button>
+  </section>
+
+  <section id="quiz" class="hidden">
+    <div class="bar"><span id="progress"></span><button id="submit">Submit answers</button></div>
+    <div id="questions"></div>
+  </section>
+
+  <section id="results" class="hidden"></section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+let bank = [], active = [];
+
+const shuffle = a => { a = a.slice(); for (let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a; };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function validate(data){
+  if(!Array.isArray(data) || !data.length) throw new Error("File must be a non-empty JSON array.");
+  data.forEach((q,i)=>{
+    if(!q.question || !Array.isArray(q.options) || !Array.isArray(q.answer)) throw new Error("Question "+(i+1)+" needs question, options and answer[].");
+  });
+  return data;
+}
+
+function init(data){
+  bank = validate(data);
+  $("sub").textContent = bank.length + " questions loaded";
+  const topics = [...new Set(bank.map(q=>q.topic||"General"))].sort();
+  $("topic").innerHTML = '<option value="">All topics ('+bank.length+')</option>' +
+    topics.map(t=>'<option value="'+esc(t)+'">'+esc(t)+' ('+bank.filter(q=>(q.topic||"General")===t).length+')</option>').join("");
+  $("count").value = Math.min(57, bank.length);
+  $("loader").classList.add("hidden");
+  $("setup").classList.remove("hidden");
+}
+
+fetch("questions.json").then(r=>{ if(!r.ok) throw 0; return r.json(); }).then(init).catch(()=>{
+  $("sub").textContent = "";
+  $("loader").classList.remove("hidden");
+});
+
+$("file").addEventListener("change", e=>{
+  const f = e.target.files[0]; if(!f) return;
+  f.text().then(t=>{ try{ init(JSON.parse(t)); $("loadErr").textContent=""; }catch(err){ $("loadErr").textContent = err.message; } });
+});
+
+$("start").onclick = () => {
+  const t = $("topic").value;
+  let pool = bank.filter(q => !t || (q.topic||"General")===t);
+  if($("shuffle").checked) pool = shuffle(pool);
+  const n = Math.max(1, Math.min(parseInt($("count").value)||pool.length, pool.length));
+  startQuiz(pool.slice(0,n), $("shuffle").checked);
+};
+
+function startQuiz(qs, doShuffle){
+  // Build display order for options while remembering which original index is correct
+  active = qs.map(q=>{
+    const order = q.options.map((_,i)=>i);
+    return {...q, order: doShuffle ? shuffle(order) : order};
+  });
+  $("setup").classList.add("hidden");
+  $("results").classList.add("hidden");
+  $("quiz").classList.remove("hidden");
+  $("questions").innerHTML = active.map((q,qi)=>{
+    const multi = q.answer.length>1;
+    return '<div class="card" data-q="'+qi+'"><div class="topic">'+esc(q.topic||"")+' · Question '+(qi+1)+' of '+active.length+'</div>'
+      +'<p class="q">'+esc(q.question)+'</p>'
+      +(multi?'<p class="hint">Select '+q.answer.length+'.</p>':'')
+      +q.order.map(oi=>'<label class="opt"><input type="'+(multi?'checkbox':'radio')+'" name="q'+qi+'" value="'+oi+'"><span>'+esc(q.options[oi])+'</span></label>').join("")
+      +'</div>';
+  }).join("");
+  updateProgress();
+  window.scrollTo(0,0);
+}
+
+function updateProgress(){
+  const done = active.filter((_,qi)=>document.querySelector('input[name="q'+qi+'"]:checked')).length;
+  $("progress").textContent = done + " of " + active.length + " answered";
+}
+$("questions").addEventListener("change", updateProgress);
+
+$("submit").onclick = () => {
+  const unanswered = active.filter((_,qi)=>!document.querySelector('input[name="q'+qi+'"]:checked')).length;
+  if(unanswered && !confirm(unanswered+" question(s) unanswered. Submit anyway? They will count as wrong.")) return;
+  grade();
+};
+
+function grade(){
+  let correct = 0; const byTopic = {}; const wrongIds = [];
+  const review = active.map((q,qi)=>{
+    const picked = [...document.querySelectorAll('input[name="q'+qi+'"]:checked')].map(i=>+i.value).sort();
+    const ans = q.answer.slice().sort();
+    const ok = picked.length===ans.length && picked.every((v,i)=>v===ans[i]);
+    const t = q.topic||"General";
+    byTopic[t] = byTopic[t]||{c:0,n:0}; byTopic[t].n++;
+    if(ok){correct++; byTopic[t].c++;} else wrongIds.push(q.id);
+    const opts = q.order.map(oi=>{
+      const isAns = ans.includes(oi), isPick = picked.includes(oi);
+      let cls="", tag="";
+      if(isAns && isPick){cls="correct";tag="Correct";}
+      else if(isPick){cls="wrong";tag="Your answer";}
+      else if(isAns){cls="missed";tag="Correct answer";}
+      return '<div class="opt '+cls+'"><span>'+esc(q.options[oi])+'</span><span class="tag">'+tag+'</span></div>';
+    }).join("");
+    return '<div class="card"><div class="topic">'+esc(t)+' · Question '+(qi+1)+'</div>'
+      +'<div class="verdict '+(ok?'ok':'no')+'">'+(ok?'Correct':(picked.length?'Incorrect':'Not answered'))+'</div>'
+      +'<p class="q">'+esc(q.question)+'</p>'+opts
+      +(q.explanation?'<div class="expl">'+esc(q.explanation)+'</div>':'')+'</div>';
+  }).join("");
+
+  const pct = Math.round(correct/active.length*1000)/10;
+  const rows = Object.entries(byTopic).sort().map(([t,v])=>'<tr><td>'+esc(t)+'</td><td>'+v.c+'/'+v.n+'</td><td>'+Math.round(v.c/v.n*100)+'%</td></tr>').join("");
+  $("quiz").classList.add("hidden");
+  $("results").classList.remove("hidden");
+  $("results").innerHTML =
+    '<div class="card"><div class="score">'+pct+'%</div><p>'+correct+' correct, '+(active.length-correct)+' incorrect out of '+active.length+'.</p>'
+    +'<table class="topics">'+rows+'</table><br>'
+    +'<div class="row"><button id="again">New quiz</button>'
+    +(wrongIds.length?'<button class="secondary" id="retry">Retry the '+wrongIds.length+' I got wrong</button>':'')+'</div></div>'
+    + review;
+  $("again").onclick = () => { $("results").classList.add("hidden"); $("setup").classList.remove("hidden"); window.scrollTo(0,0); };
+  if($("retry")) $("retry").onclick = () => startQuiz(bank.filter(q=>wrongIds.includes(q.id)), $("shuffle").checked);
+  window.scrollTo(0,0);
+}
+</script>
+</body>
+</html>
