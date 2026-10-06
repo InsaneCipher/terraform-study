@@ -9,17 +9,29 @@ terraform {
 
 # Main Code
 provider "aws" {
-  region = var.region
+  region     = var.region
   access_key = var.access_key
   secret_key = var.access_secret
 }
 
+data "aws_instances" "aws_info" {}
+
+# Get latest AMI info
+data "aws_ami" "ami_info" {
+  most_recent = true
+  owners      = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = ["al2023-ami-2023.*-kernel-6.18-x86_64"]
+  }
+}
 
 resource "aws_instance" "myec2" {
-  ami = var.ami
+  ami = data.aws_ami.ami_info.image_id
   # If dev && eu-west-2 = t3.micro, else = t3.small
   instance_type = var.environment == "dev" && var.region == "eu-west-2" ? "t3.micro" : "t3.small"
-  count = var.environment == "dev" ? 3 : 10
+  count         = var.environment == "dev" ? 3 : 10
 
   tags = {
     Name = "my-ec2-A${1 + count.index}"
